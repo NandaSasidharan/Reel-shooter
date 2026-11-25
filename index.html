@@ -45,7 +45,7 @@ button.p{background:var(--acc);color:var(--on);font-weight:600;width:100%;font-s
 <div id="mixes"></div>
 <div class="chips"><button data-p="30,25,20,25">Balanced</button><button data-p="20,20,50,10">Action</button><button data-p="30,45,5,20">Calm / yoga</button></div></div>
 <div class="card sum" id="sum"></div>
-<label style="display:flex;gap:8px;align-items:center;margin-bottom:10px;color:var(--fg)"><input type="checkbox" id="snd" checked> Record sound</label><button class="p" id="go">Start session</button><p id="err" class="warn"></p>
+<label style="display:flex;gap:8px;align-items:center;margin-bottom:10px;color:var(--fg)"><input type="checkbox" id="snd" checked> Record sound</label><label style="display:flex;gap:8px;align-items:center;margin-bottom:10px;color:var(--fg)"><input type="checkbox" id="cue" checked> Cue beeps (countdown, record, photo)</label><button class="p" id="go">Start session</button><p id="err" class="warn"></p>
 </main>
 <div id="session"><video id="vid" playsinline muted></video><div id="grid"></div>
 <div class="hud" id="top"></div><div class="hud" id="big"></div><div class="hud" id="lab"></div><div id="bar"></div>
@@ -63,7 +63,7 @@ K.forEach((k,i)=>{$('mixes').insertAdjacentHTML('beforeend',`<div class="mix"><s
 function mixv(){const v={};let s=0;K.forEach(k=>{v[k]=+$('m_'+k).value;s+=v[k]});K.forEach(k=>v[k]=s?v[k]/s:0);return v}
 function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
 function build(){
- const R=+$('reel').value,S=+$('sess').value*60,L=+$('len').value,m=mixv();let list=[];
+ const R=Math.min(600,Math.max(1,+$('reel').value||1)),S=(+$('sess').value||1)*60,L=Math.max(.5,+$('len').value||.5),m=mixv();let list=[];
  ['real','slow','fast'].forEach(k=>{const n=Math.round(R*m[k]/L);for(let i=0;i<n;i++)list.push({type:k,cap:L*T[k].sp})});
  const np=Math.round(R*m.photo/PHOTO);for(let i=0;i<np;i++)list.push({type:'photo',cap:.5});
  shuffle(list);
@@ -78,7 +78,7 @@ function update(){
 document.querySelectorAll('input').forEach(e=>e.addEventListener('input',update));
 document.querySelectorAll('[data-p]').forEach(b=>b.onclick=()=>{b.dataset.p.split(',').forEach((v,i)=>$('m_'+K[i]).value=v);update()});
 update();
-function beep(f=880,d=.15){try{ac=ac||new AudioContext();const o=ac.createOscillator(),g=ac.createGain();o.frequency.value=f;g.gain.value=.2;o.connect(g);g.connect(ac.destination);o.start();o.stop(ac.currentTime+d)}catch(e){}navigator.vibrate&&navigator.vibrate(d*1000)}
+function beep(f=880,d=.15){try{if(!$('cue').checked)throw 0;ac=ac||new AudioContext();const o=ac.createOscillator(),g=ac.createGain();o.frequency.value=f;g.gain.value=.2;o.connect(g);g.connect(ac.destination);o.start();o.stop(ac.currentTime+d)}catch(e){}navigator.vibrate&&navigator.vibrate(d*1000)}
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 async function countdown(sec,label,rec){
  $('lab').textContent=label;$('session').classList.toggle('rec',!!rec);
@@ -100,7 +100,7 @@ async function run(){
  catch(e){$('err').textContent=('Camera not available ('+e.name+'): '+e.message+'\nAllow camera access and open this page over HTTPS.');return}
  try{lock=await navigator.wakeLock.request('screen')}catch(e){}
  const v=$('vid');v.srcObject=stream;v.style.transform=$('cam').value==='user'?'scaleX(-1)':'';await v.play();
- $('setup').style.display='none';$('session').style.display='block';abort=false;clips=[];
+ $('setup').style.display='none';$('session').style.display='block';abort=false;clips=[];window.stamp=new Date(Date.now()-new Date().getTimezoneOffset()*60000).toISOString().slice(0,16).replace('T','_').replace(':','');
  for(let i=0;i<shots.length&&!abort;i++){const s=shots[i];
   $('top').textContent=`Shot ${i+1}/${shots.length} · next: ${T[s.type].n}`;
   await countdown(s.gap,'Rest');if(abort)break;
@@ -112,7 +112,7 @@ async function run(){
 function showReview(){
  const box=$('clips');box.innerHTML='';
  clips.forEach((c,i)=>{const url=URL.createObjectURL(c.blob);c.url=url;
-  const ext=c.type==='photo'?'jpg':(c.blob.type.includes('mp4')?'mp4':'webm');c.name=`${String(i+1).padStart(2,'0')}_${c.type}.${ext}`;
+  const ext=c.type==='photo'?'jpg':(c.blob.type.includes('mp4')?'mp4':'webm');c.name=`${window.stamp}_${String(i+1).padStart(2,'0')}_${c.type}.${ext}`;
   const d=document.createElement('div');d.className='clip';
   d.innerHTML=(c.type==='photo'?`<img src="${url}">`:`<video src="${url}" controls playsinline></video>`)+`<span class="tag">${T[c.type].n}${c.type==='slow'?' 0.5x':c.type==='fast'?' 2x':''}</span><a href="${url}" download="${c.name}"><button>Save</button></a>`;
   const vid=d.querySelector('video');if(vid){const sp=T[c.type].sp;vid.addEventListener('loadedmetadata',()=>vid.playbackRate=sp);vid.addEventListener('play',()=>vid.playbackRate=sp)}
