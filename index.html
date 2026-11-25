@@ -45,7 +45,7 @@ button.p{background:var(--acc);color:var(--on);font-weight:600;width:100%;font-s
 <div id="mixes"></div>
 <div class="chips"><button data-p="30,25,20,25">Balanced</button><button data-p="20,20,50,10">Action</button><button data-p="30,45,5,20">Calm / yoga</button></div></div>
 <div class="card sum" id="sum"></div>
-<label style="display:flex;gap:8px;align-items:center;margin-bottom:10px;color:var(--fg)"><input type="checkbox" id="snd" checked> Record sound</label><label style="display:flex;gap:8px;align-items:center;margin-bottom:10px;color:var(--fg)"><input type="checkbox" id="cue" checked> Cue beeps (countdown, record, photo)</label><button class="p" id="go">Start session</button><p id="err" class="warn"></p>
+<label style="display:flex;gap:8px;align-items:center;margin-bottom:10px;color:var(--fg)"><input type="checkbox" id="snd" checked> Record sound</label><label style="display:flex;gap:8px;align-items:center;margin-bottom:10px;color:var(--fg)"><input type="checkbox" id="cue" checked> Cue beeps (countdown, record, photo)</label><label style="display:flex;gap:8px;align-items:center;margin-bottom:10px;color:var(--fg)"><input type="checkbox" id="bw"> Black and white</label><button class="p" id="go">Start session</button><p id="err" class="warn"></p>
 </main>
 <div id="session"><video id="vid" playsinline muted></video><div id="grid"></div>
 <div class="hud" id="top"></div><div class="hud" id="big"></div><div class="hud" id="lab"></div><div id="bar"></div>
@@ -88,18 +88,20 @@ async function countdown(sec,label,rec){
   $('bar').style.width=(100-left/(sec*1000)*100)+'%';await sleep(100)}}
 function record(sec){return new Promise(async res=>{
  const mt=['video/mp4','video/webm;codecs=vp9','video/webm'].find(t=>MediaRecorder.isTypeSupported(t))||'';
- const r=new MediaRecorder(stream,mt?{mimeType:mt}:{}),ch=[];
+ const r=new MediaRecorder(recSrc(),mt?{mimeType:mt}:{}),ch=[];
  r.ondataavailable=e=>e.data.size&&ch.push(e.data);
  r.onstop=()=>res(new Blob(ch,{type:r.mimeType}));
  r.start();beep(1200,.25);await countdown(sec,'REC',true);r.stop()})}
-function snap(){const v=$('vid'),c=document.createElement('canvas');c.width=v.videoWidth;c.height=v.videoHeight;c.getContext('2d').drawImage(v,0,0);beep(1200,.1);
+function setupGray(v){window.gc=null;v.style.filter='';if(!$('bw').checked)return;v.style.filter='grayscale(1)';const c=document.createElement('canvas');c.width=v.videoWidth||1280;c.height=v.videoHeight||720;const x=c.getContext('2d');x.filter='grayscale(1)';window.gc=c;(function d(){if(!stream||!stream.active)return;x.drawImage(v,0,0,c.width,c.height);requestAnimationFrame(d)})()}
+function recSrc(){if(!window.gc)return stream;const s=window.gc.captureStream(30);stream.getAudioTracks().forEach(t=>s.addTrack(t));return s}
+function snap(){const v=$('vid'),c=document.createElement('canvas');c.width=v.videoWidth;c.height=v.videoHeight;const cx=c.getContext('2d');if(window.gc)cx.filter='grayscale(1)';cx.drawImage(v,0,0);beep(1200,.1);
  return new Promise(r=>c.toBlob(r,'image/jpeg',.92))}
 async function run(){
  $('err').textContent='';if(!shots.length){$('err').textContent='No shots planned. Check the reel length and the mix.';return}
  try{stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:$('cam').value,width:{ideal:1920},height:{ideal:1080}},audio:$('snd').checked})}
  catch(e){$('err').textContent=('Camera not available ('+e.name+'): '+e.message+'\nAllow camera access and open this page over HTTPS.');return}
  try{lock=await navigator.wakeLock.request('screen')}catch(e){}
- const v=$('vid');v.srcObject=stream;v.style.transform=$('cam').value==='user'?'scaleX(-1)':'';await v.play();
+ const v=$('vid');v.srcObject=stream;v.style.transform=$('cam').value==='user'?'scaleX(-1)':'';await v.play();setupGray(v);
  $('setup').style.display='none';$('session').style.display='block';abort=false;clips=[];window.stamp=new Date(Date.now()-new Date().getTimezoneOffset()*60000).toISOString().slice(0,16).replace('T','_').replace(':','');
  for(let i=0;i<shots.length&&!abort;i++){const s=shots[i];
   $('top').textContent=`Shot ${i+1}/${shots.length} · next: ${T[s.type].n}`;
