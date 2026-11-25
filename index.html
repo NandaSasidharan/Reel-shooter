@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Reel Shooter</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);--bg:#fff;--fg:#14171a;--mut:#667085;--card:#f2f4f7;--acc:#ff4d2e;--on:#fff;color-scheme:light}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f1114;--fg:#f1f3f5;--mut:#9aa3ad;--card:#1b1e23;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#0f1114;--fg:#f1f3f5;--mut:#9aa3ad;--card:#1b1e23;color-scheme:dark}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.4 system-ui,-apple-system,Roboto,sans-serif}
+main{max-width:520px;margin:0 auto;padding:16px}
+h1{font-size:22px;margin:4px 0 12px}
+.card{background:var(--card);border-radius:14px;padding:14px;margin-bottom:12px}
+label{display:block;font-size:13px;color:var(--mut);margin-bottom:4px}
+input[type=number],select{width:100%;padding:10px;border-radius:10px;border:1px solid var(--mut);background:var(--bg);color:var(--fg);font-size:16px}
+.row{display:flex;gap:10px}.row>*{flex:1}
+.mix{display:grid;grid-template-columns:96px 1fr 44px;align-items:center;gap:8px;margin:6px 0}
+.mix input{width:100%;accent-color:var(--acc)}
+button{font:inherit;border:0;border-radius:12px;padding:12px 16px;background:var(--card);color:var(--fg);cursor:pointer}
+button.p{background:var(--acc);color:var(--on);font-weight:600;width:100%;font-size:18px;padding:14px}
+.chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.sum{font-size:14px;color:var(--mut)}.warn{color:var(--acc)}
+#session{position:fixed;inset:0;background:#000;color:#fff;display:none}
+#vid{width:100%;height:100%;object-fit:cover}
+#grid{position:absolute;inset:0;pointer-events:none;display:none;background:linear-gradient(90deg,transparent 33%,#fff6 33%,#fff6 calc(33% + 1px),transparent calc(33% + 1px),transparent 66%,#fff6 66%,#fff6 calc(66% + 1px),transparent calc(66% + 1px)),linear-gradient(transparent 33%,#fff6 33%,#fff6 calc(33% + 1px),transparent calc(33% + 1px),transparent 66%,#fff6 66%,#fff6 calc(66% + 1px),transparent calc(66% + 1px))}
+.hud{position:absolute;left:0;right:0;text-align:center;text-shadow:0 1px 6px #000}
+#top{top:calc(env(safe-area-inset-top,0px) + 12px);font-size:18px}
+#big{top:38%;font-size:96px;font-weight:700}
+#lab{top:calc(38% + 110px);font-size:24px}
+#bar{position:absolute;left:0;bottom:0;height:6px;background:var(--acc);width:0}
+#stop{position:absolute;right:14px;bottom:calc(env(safe-area-inset-bottom,0px) + 20px);background:#0008;color:#fff}
+.rec #lab{color:#ff5a4d}
+#review,#setup{display:block}
+.clip{margin-bottom:14px}.clip video,.clip img{width:100%;border-radius:12px;background:#000}
+.tag{display:inline-block;font-size:12px;background:var(--acc);color:var(--on);border-radius:8px;padding:2px 8px;margin:6px 6px 6px 0}
+</style></head><body>
+<main id="setup">
+<h1>Reel Shooter</h1>
+<div class="card">
+<div class="row"><div><label>Reel length (sec)</label><input id="reel" type="number" value="30" min="5"></div>
+<div><label>Session length (min)</label><input id="sess" type="number" value="10" min="1"></div></div>
+<div class="row" style="margin-top:10px"><div><label>Avg clip on reel (sec)</label><input id="len" type="number" value="3" min="1" step="0.5"></div>
+<div><label>Camera</label><select id="cam"><option value="environment">Back</option><option value="user">Front</option></select></div></div>
+</div>
+<div class="card"><label>Footage mix (auto-balanced to 100%)</label>
+<div id="mixes"></div>
+<div class="chips"><button data-p="30,25,20,25">Balanced</button><button data-p="20,20,50,10">Action</button><button data-p="30,45,5,20">Calm / yoga</button></div></div>
+<div class="card sum" id="sum"></div>
+<button class="p" id="go">Start session</button><p id="err" class="warn"></p>
+</main>
+<div id="session"><video id="vid" playsinline muted></video><div id="grid"></div>
+<div class="hud" id="top"></div><div class="hud" id="big"></div><div class="hud" id="lab"></div><div id="bar"></div>
+<button id="stop">End session</button></div>
+<main id="review" style="display:none"><h1>Your footage</h1>
+<p class="sum">Clips are tagged with their speed. Slow-mo and fast are previewed by changing playback speed, so join them in your video editor.</p>
+<button class="p" id="dlall">Save all</button><div id="clips" style="margin-top:14px"></div>
+<button id="again" style="width:100%">New session</button></main>
+<script>
+const $=id=>document.getElementById(id);
+const T={real:{n:'Real speed',sp:1},slow:{n:'Slow-mo',sp:.5},fast:{n:'Fast',sp:2},photo:{n:'Photo'}};
+const K=Object.keys(T),PHOTO=1.5,READY=3;
+let shots=[],clips=[],abort=false,stream=null,lock=null,ac=null;
+K.forEach((k,i)=>{$('mixes').insertAdjacentHTML('beforeend',`<div class="mix"><span>${T[k].n}</span><input type="range" id="m_${k}" min="0" max="100" value="${[30,25,20,25][i]}"><b id="p_${k}"></b></div>`)});
+function mixv(){const v={};let s=0;K.forEach(k=>{v[k]=+$('m_'+k).value;s+=v[k]});K.forEach(k=>v[k]=s?v[k]/s:0);return v}
+function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
+function build(){
+ const R=+$('reel').value,S=+$('sess').value*60,L=+$('len').value,m=mixv();let list=[];
+ ['real','slow','fast'].forEach(k=>{const n=Math.round(R*m[k]/L);for(let i=0;i<n;i++)list.push({type:k,cap:L*T[k].sp})});
+ const np=Math.round(R*m.photo/PHOTO);for(let i=0;i<np;i++)list.push({type:'photo',cap:.5});
+ shuffle(list);
+ const capT=list.reduce((a,s)=>a+s.cap,0)+READY*list.length,rest=Math.max(0,S-capT);
+ const w=list.map(()=>.3+Math.random()),ws=w.reduce((a,b)=>a+b,0);
+ list.forEach((s,i)=>s.gap=rest*w[i]/ws);
+ return{list,capT,rest,S}}
+function update(){
+ const m=mixv();K.forEach(k=>$('p_'+k).textContent=Math.round(m[k]*100)+'%');
+ const b=build();shots=b.list;
+ $('sum').innerHTML=`${shots.length} shots · about ${Math.round(b.capT)}s of shooting + ${Math.round(b.rest)}s of random rest`+(b.S<b.capT?`<br><span class="warn">Session is too short. You need at least ${Math.ceil(b.capT/60)} min.</span>`:'')}
+document.querySelectorAll('input').forEach(e=>e.addEventListener('input',update));
+document.querySelectorAll('[data-p]').forEach(b=>b.onclick=()=>{b.dataset.p.split(',').forEach((v,i)=>$('m_'+K[i]).value=v);update()});
+update();
+function beep(f=880,d=.15){try{ac=ac||new AudioContext();const o=ac.createOscillator(),g=ac.createGain();o.frequency.value=f;g.gain.value=.2;o.connect(g);g.connect(ac.destination);o.start();o.stop(ac.currentTime+d)}catch(e){}navigator.vibrate&&navigator.vibrate(d*1000)}
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+async function countdown(sec,label,rec){
+ $('lab').textContent=label;$('session').classList.toggle('rec',!!rec);
+ const end=Date.now()+sec*1000;let last=-1;
+ while(!abort){const left=end-Date.now();if(left<=0)break;const c=Math.ceil(left/1000);
+  if(c!==last){last=c;$('big').textContent=c;if(label==='Get ready'&&c<=3)beep(660,.1)}
+  $('bar').style.width=(100-left/(sec*1000)*100)+'%';await sleep(100)}}
+function record(sec){return new Promise(async res=>{
+ const mt=['video/mp4','video/webm;codecs=vp9','video/webm'].find(t=>MediaRecorder.isTypeSupported(t))||'';
+ const r=new MediaRecorder(stream,mt?{mimeType:mt}:{}),ch=[];
+ r.ondataavailable=e=>e.data.size&&ch.push(e.data);
+ r.onstop=()=>res(new Blob(ch,{type:r.mimeType}));
+ r.start();beep(1200,.25);await countdown(sec,'REC',true);r.stop()})}
+function snap(){const v=$('vid'),c=document.createElement('canvas');c.width=v.videoWidth;c.height=v.videoHeight;c.getContext('2d').drawImage(v,0,0);beep(1200,.1);
+ return new Promise(r=>c.toBlob(r,'image/jpeg',.92))}
+async function run(){
+ $('err').textContent='';if(!shots.length){$('err').textContent='No shots planned. Check the reel length and the mix.';return}
+ try{stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:$('cam').value,width:{ideal:1280},height:{ideal:720}},audio:false})}
+ catch(e){$('err').textContent=('Camera not available ('+e.name+'): '+e.message+'\nAllow camera access and open this page over HTTPS.');return}
+ try{lock=await navigator.wakeLock.request('screen')}catch(e){}
+ const v=$('vid');v.srcObject=stream;v.style.transform=$('cam').value==='user'?'scaleX(-1)':'';await v.play();
+ $('setup').style.display='none';$('session').style.display='block';abort=false;clips=[];
+ for(let i=0;i<shots.length&&!abort;i++){const s=shots[i];
+  $('top').textContent=`Shot ${i+1}/${shots.length} · next: ${T[s.type].n}`;
+  await countdown(s.gap,'Rest');if(abort)break;
+  await countdown(READY,'Get ready');if(abort)break;
+  if(s.type==='photo'){clips.push({type:'photo',blob:await snap()});await sleep(500)}
+  else clips.push({type:s.type,blob:await record(s.cap)})}
+ stream.getTracks().forEach(t=>t.stop());lock&&lock.release().catch(()=>{});
+ $('session').style.display='none';showReview()}
+function showReview(){
+ const box=$('clips');box.innerHTML='';
+ clips.forEach((c,i)=>{const url=URL.createObjectURL(c.blob);c.url=url;
+  const ext=c.type==='photo'?'jpg':(c.blob.type.includes('mp4')?'mp4':'webm');c.name=`${String(i+1).padStart(2,'0')}_${c.type}.${ext}`;
+  const d=document.createElement('div');d.className='clip';
+  d.innerHTML=(c.type==='photo'?`<img src="${url}">`:`<video src="${url}" controls playsinline></video>`)+`<span class="tag">${T[c.type].n}${c.type==='slow'?' 0.5x':c.type==='fast'?' 2x':''}</span><a href="${url}" download="${c.name}"><button>Save</button></a>`;
+  const vid=d.querySelector('video');if(vid){const sp=T[c.type].sp;vid.addEventListener('loadedmetadata',()=>vid.playbackRate=sp);vid.addEventListener('play',()=>vid.playbackRate=sp)}
+  box.appendChild(d)});
+ $('review').style.display='block'}
+$('go').onclick=run;
+$('stop').onclick=()=>{abort=true};
+$('again').onclick=()=>{$('review').style.display='none';$('setup').style.display='block';update()};
+$('dlall').onclick=async()=>{for(const c of clips){const a=document.createElement('a');a.href=c.url;a.download=c.name;a.click();await sleep(500)}};
+</script></body></html>
