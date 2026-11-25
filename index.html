@@ -45,7 +45,7 @@ button.p{background:var(--acc);color:var(--on);font-weight:600;width:100%;font-s
 <div id="mixes"></div>
 <div class="chips"><button data-p="30,25,20,25">Balanced</button><button data-p="20,20,50,10">Action</button><button data-p="30,45,5,20">Calm / yoga</button></div></div>
 <div class="card sum" id="sum"></div>
-<button class="p" id="go">Start session</button><p id="err" class="warn"></p>
+<label style="display:flex;gap:8px;align-items:center;margin-bottom:10px;color:var(--fg)"><input type="checkbox" id="snd" checked> Record sound</label><button class="p" id="go">Start session</button><p id="err" class="warn"></p>
 </main>
 <div id="session"><video id="vid" playsinline muted></video><div id="grid"></div>
 <div class="hud" id="top"></div><div class="hud" id="big"></div><div class="hud" id="lab"></div><div id="bar"></div>
@@ -96,7 +96,7 @@ function snap(){const v=$('vid'),c=document.createElement('canvas');c.width=v.vi
  return new Promise(r=>c.toBlob(r,'image/jpeg',.92))}
 async function run(){
  $('err').textContent='';if(!shots.length){$('err').textContent='No shots planned. Check the reel length and the mix.';return}
- try{stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:$('cam').value,width:{ideal:1280},height:{ideal:720}},audio:false})}
+ try{stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:$('cam').value,width:{ideal:1920},height:{ideal:1080}},audio:$('snd').checked})}
  catch(e){$('err').textContent=('Camera not available ('+e.name+'): '+e.message+'\nAllow camera access and open this page over HTTPS.');return}
  try{lock=await navigator.wakeLock.request('screen')}catch(e){}
  const v=$('vid');v.srcObject=stream;v.style.transform=$('cam').value==='user'?'scaleX(-1)':'';await v.play();
